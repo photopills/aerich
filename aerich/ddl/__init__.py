@@ -188,18 +188,20 @@ class BaseDDL:
             column_names=", ".join([self.schema_generator.quote(f) for f in field_names]),
         )
 
-    def drop_index(self, model: "Type[Model]", field_names: List[str], unique=False):
+    def drop_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=True):
         return self._DROP_INDEX_TEMPLATE.format(
             index_name=self.schema_generator._generate_index_name(
                 "idx" if not unique else "uid", model, field_names
             ),
+            exists="IF NOT EXISTS " if safe else "",
             table_name=model._meta.db_table,
         )
 
-    def drop_index_by_name(self, model: "Type[Model]", index_name: str):
+    def drop_index_by_name(self, model: "Type[Model]", index_name: str, safe: bool):
         return self._DROP_INDEX_TEMPLATE.format(
             index_name=index_name,
             table_name=model._meta.db_table,
+            exists="IF NOT EXISTS " if safe else "",
         )
 
     def add_fk(self, model: "Type[Model]", field_describe: dict, reference_table_describe: dict):

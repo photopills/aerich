@@ -274,7 +274,7 @@ class Migrate:
                     cls._add_operator(cls._add_index(model, index, True, safe), upgrade, True)
                 # remove unique_together
                 for index in old_unique_together.difference(new_unique_together):
-                    cls._add_operator(cls._drop_index(model, index, True), upgrade, True)
+                    cls._add_operator(cls._drop_index(model, index, True, safe), upgrade, True)
                 # add indexes
                 for index in new_indexes.difference(old_indexes):
                     cls._add_operator(
@@ -282,7 +282,7 @@ class Migrate:
                     )
                 # remove indexes
                 for index in old_indexes.difference(new_indexes):
-                    cls._add_operator(cls._drop_index(model, index, False), upgrade, True)
+                    cls._add_operator(cls._drop_index(model, index, False, safe), upgrade, True)
                 old_data_fields = old_model_describe.get("data_fields")
                 new_data_fields = new_model_describe.get("data_fields")
 
@@ -435,7 +435,7 @@ class Migrate:
                                 )
                             else:
                                 cls._add_operator(
-                                    cls._drop_index(model, (field_name,), unique), upgrade, True
+                                    cls._drop_index(model, (field_name,), unique, safe), upgrade, True
                                 )
                         elif option == "db_field_types.":
                             # continue since repeated with others
@@ -499,17 +499,27 @@ class Migrate:
         return ret
 
     @classmethod
-    def _drop_index(cls, model: Type[Model], fields_name: Union[Tuple[str], Index], unique=False):
+    def _drop_index(
+        cls,
+        model: Type[Model],
+        fields_name: Union[Tuple[str], Index],
+        unique=False,
+        safe=True,
+    ):
         if isinstance(fields_name, Index):
             return cls.ddl.drop_index_by_name(
-                model, fields_name.index_name(cls.ddl.schema_generator, model)
+                model, fields_name.index_name(cls.ddl.schema_generator, model), safe
             )
         fields_name = cls._resolve_fk_fields_name(model, fields_name)
-        return cls.ddl.drop_index(model, fields_name, unique)
+        return cls.ddl.drop_index(model, fields_name, unique, safe)
 
     @classmethod
     def _add_index(
-        cls, model: Type[Model], fields_name: Union[Tuple[str], Index], unique=False, safe=True
+        cls,
+        model: Type[Model],
+        fields_name: Union[Tuple[str], Index],
+        unique=False,
+        safe=True,
     ):
         if isinstance(fields_name, Index):
             return fields_name.get_sql(cls.ddl.schema_generator, model, safe)
