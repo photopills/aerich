@@ -9,7 +9,9 @@ from aerich.ddl import BaseDDL
 class PostgresDDL(BaseDDL):
     schema_generator_cls = AsyncpgSchemaGenerator
     DIALECT = AsyncpgSchemaGenerator.DIALECT
-    _ADD_INDEX_TEMPLATE = 'CREATE {unique}INDEX {exists}"{index_name}" ON "{table_name}" ({column_names})'
+    _ADD_INDEX_TEMPLATE = (
+        'CREATE {unique}INDEX {exists}"{index_name}" ON "{table_name}" ({column_names})'
+    )
     _DROP_INDEX_TEMPLATE = 'DROP INDEX {exists}"{index_name}"'
     _ALTER_NULL_TEMPLATE = 'ALTER TABLE "{table_name}" ALTER COLUMN "{column}" {set_drop} NOT NULL'
     _MODIFY_COLUMN_TEMPLATE = (

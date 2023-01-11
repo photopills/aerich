@@ -138,9 +138,7 @@ class Migrate:
         """
         new_version_content = get_models_describe(cls.app)
         cls.diff_models(cls._last_version_content, new_version_content, safe=safe)
-        cls.diff_models(
-            new_version_content, cls._last_version_content, False, safe=safe
-        )
+        cls.diff_models(new_version_content, cls._last_version_content, False, safe=safe)
 
         cls._merge_operators()
 
@@ -285,23 +283,29 @@ class Migrate:
                     cls._add_operator(cls._drop_index(model, index, True, safe), upgrade, True)
                 # add indexes
                 for index in new_indexes.difference(old_indexes):
-                    cls._add_operator(
-                        cls._add_index(model, index, False, safe), upgrade, True
-                    )
+                    cls._add_operator(cls._add_index(model, index, False, safe), upgrade, True)
                 # remove indexes
                 for index in old_indexes.difference(new_indexes):
                     cls._add_operator(cls._drop_index(model, index, False, safe), upgrade, True)
-                old_data_fields = list(filter(lambda x: x.get('db_field_types') is not None,
-                                              old_model_describe.get("data_fields")))
-                new_data_fields = list(filter(lambda x: x.get('db_field_types') is not None,
-                                              new_model_describe.get("data_fields")))
+                old_data_fields = list(
+                    filter(
+                        lambda x: x.get("db_field_types") is not None,
+                        old_model_describe.get("data_fields"),
+                    )
+                )
+                new_data_fields = list(
+                    filter(
+                        lambda x: x.get("db_field_types") is not None,
+                        new_model_describe.get("data_fields"),
+                    )
+                )
 
                 old_data_fields_name = list(map(lambda x: x.get("name"), old_data_fields))
                 new_data_fields_name = list(map(lambda x: x.get("name"), new_data_fields))
 
                 # add fields or rename fields
                 for new_data_field_name in set(new_data_fields_name).difference(
-                        set(old_data_fields_name)
+                    set(old_data_fields_name)
                 ):
                     new_data_field = next(
                         filter(lambda x: x.get("name") == new_data_field_name, new_data_fields)
@@ -313,22 +317,22 @@ class Migrate:
                         if len(changes) == 2:
                             # rename field
                             if (
-                                    changes[0]
-                                    == (
+                                changes[0]
+                                == (
                                     "change",
                                     "name",
                                     (old_data_field_name, new_data_field_name),
-                            )
-                                    and changes[1]
-                                    == (
+                                )
+                                and changes[1]
+                                == (
                                     "change",
                                     "db_column",
                                     (
-                                            old_data_field.get("db_column"),
-                                            new_data_field.get("db_column"),
+                                        old_data_field.get("db_column"),
+                                        new_data_field.get("db_column"),
                                     ),
-                            )
-                                    and old_data_field_name not in new_data_fields_name
+                                )
+                                and old_data_field_name not in new_data_fields_name
                             ):
                                 if upgrade:
                                     is_rename = click.prompt(
@@ -344,9 +348,9 @@ class Migrate:
                                     cls._rename_old.append(old_data_field_name)
                                     # only MySQL8+ has rename syntax
                                     if (
-                                            cls.dialect == "mysql"
-                                            and cls._db_version
-                                            and cls._db_version.startswith("5.")
+                                        cls.dialect == "mysql"
+                                        and cls._db_version
+                                        and cls._db_version.startswith("5.")
                                     ):
                                         cls._add_operator(
                                             cls._change_field(
@@ -377,11 +381,11 @@ class Migrate:
                             )
                 # remove fields
                 for old_data_field_name in set(old_data_fields_name).difference(
-                        set(new_data_fields_name)
+                    set(new_data_fields_name)
                 ):
                     # don't remove field if is renamed
                     if (upgrade and old_data_field_name in cls._rename_old) or (
-                            not upgrade and old_data_field_name in cls._rename_new
+                        not upgrade and old_data_field_name in cls._rename_new
                     ):
                         continue
                     old_data_field = next(
@@ -413,7 +417,7 @@ class Migrate:
 
                 # add fk
                 for new_fk_field_name in set(new_fk_fields_name).difference(
-                        set(old_fk_fields_name)
+                    set(old_fk_fields_name)
                 ):
                     fk_field = next(
                         filter(lambda x: x.get("name") == new_fk_field_name, new_fk_fields)
@@ -428,7 +432,7 @@ class Migrate:
                         )
                 # drop fk
                 for old_fk_field_name in set(old_fk_fields_name).difference(
-                        set(new_fk_fields_name)
+                    set(new_fk_fields_name)
                 ):
                     old_fk_field = next(
                         filter(lambda x: x.get("name") == old_fk_field_name, old_fk_fields)
@@ -463,7 +467,9 @@ class Migrate:
                                 )
                             else:
                                 cls._add_operator(
-                                    cls._drop_index(model, (field_name,), unique, safe), upgrade, True
+                                    cls._drop_index(model, (field_name,), unique, safe),
+                                    upgrade,
+                                    True,
                                 )
                         elif option == "db_field_types.":
                             if new_data_field.get("field_type") == "DecimalField":
@@ -476,7 +482,7 @@ class Migrate:
                                 continue
                         elif option == "default":
                             if not (
-                                    is_default_function(old_new[0]) or is_default_function(old_new[1])
+                                is_default_function(old_new[0]) or is_default_function(old_new[1])
                             ):
                                 # change column default
                                 cls._add_operator(

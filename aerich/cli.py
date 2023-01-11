@@ -245,9 +245,7 @@ async def init_db(ctx: Context, safe: bool):
         )
 
 
-@cli.command(
-    help="Introspects the database tables to standard output as TortoiseORM model."
-)
+@cli.command(help="Introspects the database tables to standard output as TortoiseORM model.")
 @click.option(
     "-t",
     "--table",
