@@ -8,15 +8,16 @@ from tortoise.transactions import in_transaction
 from tortoise.utils import get_schema_sql
 
 from aerich.exceptions import DowngradeError
-from aerich.inspectdb import InspectDb
-from aerich.migrate import Migrate
+from aerich.inspectdb.mysql import InspectMySQL
+from aerich.inspectdb.postgres import InspectPostgres
+from aerich.inspectdb.sqlite import InspectSQLite
+from aerich.migrate import MIGRATE_TEMPLATE, Migrate
 from aerich.models import Aerich
 from aerich.utils import (
     get_app_connection,
     get_app_connection_name,
     get_models_describe,
-    get_version_content_from_file,
-    write_version_file,
+    import_py_file,
 )
 
 
@@ -47,10 +48,9 @@ class Command:
                     get_app_connection_name(self.tortoise_config, self.app)
                 ) as conn:
                     file_path = Path(Migrate.migrate_location, version_file)
-                    content = get_version_content_from_file(file_path)
-                    upgrade_query_list = content.get("upgrade")
-                    for upgrade_query in upgrade_query_list:
-                        await conn.execute_script(upgrade_query)
+                    m = import_py_file(file_path)
+                    upgrade = getattr(m, "upgrade")
+                    await conn.execute_script(await upgrade(conn))
                     await Aerich.create(
                         version=version_file,
                         app=self.app,
@@ -79,12 +79,12 @@ class Command:
                 get_app_connection_name(self.tortoise_config, self.app)
             ) as conn:
                 file_path = Path(Migrate.migrate_location, file)
-                content = get_version_content_from_file(file_path)
-                downgrade_query_list = content.get("downgrade")
-                if not downgrade_query_list:
+                m = import_py_file(file_path)
+                downgrade = getattr(m, "downgrade")
+                downgrade_sql = await downgrade(conn)
+                if not downgrade_sql.strip():
                     raise DowngradeError("No downgrade items found")
-                for downgrade_query in downgrade_query_list:
-                    await conn.execute_query(downgrade_query)
+                await conn.execute_script(downgrade_sql)
                 await version.delete()
                 if delete:
                     os.unlink(file_path)
@@ -100,16 +100,22 @@ class Command:
         return ret
 
     async def history(self):
-        ret = []
         versions = Migrate.get_all_version_files()
-        for version in versions:
-            ret.append(version)
-        return ret
+        return [version for version in versions]
 
-    async def inspectdb(self, tables: List[str]):
+    async def inspectdb(self, tables: List[str] = None) -> str:
         connection = get_app_connection(self.tortoise_config, self.app)
-        inspect = InspectDb(connection, tables)
-        await inspect.inspect()
+        dialect = connection.schema_generator.DIALECT
+        if dialect == "mysql":
+            cls = InspectMySQL
+        elif dialect == "postgres":
+            cls = InspectPostgres
+        elif dialect == "sqlite":
+            cls = InspectSQLite
+        else:
+            raise NotImplementedError(f"{dialect} is not supported")
+        inspect = cls(connection, tables)
+        return await inspect.inspect()
 
     async def migrate(self, name: str = "update", safe: bool = True):
         return await Migrate.migrate(name, safe)
@@ -132,7 +138,7 @@ class Command:
             app=app,
             content=get_models_describe(app),
         )
-        content = {
-            "upgrade": [schema],
-        }
-        write_version_file(Path(dirname, version), content)
+        version_file = Path(dirname, version)
+        content = MIGRATE_TEMPLATE.format(upgrade_sql=schema, downgrade_sql="")
+        with open(version_file, "w", encoding="utf-8") as f:
+            f.write(content)
