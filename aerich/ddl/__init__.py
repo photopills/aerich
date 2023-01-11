@@ -177,9 +177,10 @@ class BaseDDL:
             new_column_type=new_column_type,
         )
 
-    def add_index(self, model: "Type[Model]", field_names: List[str], unique=False):
+    def add_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=True):
         return self._ADD_INDEX_TEMPLATE.format(
             unique="UNIQUE " if unique else "",
+            exists="IF NOT EXISTS " if safe else "",
             index_name=self.schema_generator._generate_index_name(
                 "idx" if not unique else "uid", model, field_names
             ),

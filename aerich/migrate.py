@@ -122,15 +122,17 @@ class Migrate:
         return version
 
     @classmethod
-    async def migrate(cls, name) -> str:
+    async def migrate(cls, name: str, safe: bool) -> str:
         """
         diff old models and new models to generate diff content
         :param name:
         :return:
         """
         new_version_content = get_models_describe(cls.app)
-        cls.diff_models(cls._last_version_content, new_version_content)
-        cls.diff_models(new_version_content, cls._last_version_content, False)
+        cls.diff_models(cls._last_version_content, new_version_content, safe=safe)
+        cls.diff_models(
+            new_version_content, cls._last_version_content, False, safe=safe
+        )
 
         cls._merge_operators()
 
@@ -172,7 +174,13 @@ class Migrate:
         return ret
 
     @classmethod
-    def diff_models(cls, old_models: Dict[str, dict], new_models: Dict[str, dict], upgrade=True):
+    def diff_models(
+        cls,
+        old_models: Dict[str, dict],
+        new_models: Dict[str, dict],
+        upgrade=True,
+        safe=True,
+    ):
         """
         diff models and add operators
         :param old_models:
@@ -263,13 +271,15 @@ class Migrate:
                             cls._add_operator(cls.drop_m2m(table), upgrade, True)
                 # add unique_together
                 for index in new_unique_together.difference(old_unique_together):
-                    cls._add_operator(cls._add_index(model, index, True), upgrade, True)
+                    cls._add_operator(cls._add_index(model, index, True, safe), upgrade, True)
                 # remove unique_together
                 for index in old_unique_together.difference(new_unique_together):
                     cls._add_operator(cls._drop_index(model, index, True), upgrade, True)
                 # add indexes
                 for index in new_indexes.difference(old_indexes):
-                    cls._add_operator(cls._add_index(model, index, False), upgrade, True)
+                    cls._add_operator(
+                        cls._add_index(model, index, False, safe), upgrade, True
+                    )
                 # remove indexes
                 for index in old_indexes.difference(new_indexes):
                     cls._add_operator(cls._drop_index(model, index, False), upgrade, True)
@@ -419,7 +429,9 @@ class Migrate:
                             unique = new_data_field.get("unique")
                             if old_new[0] is False and old_new[1] is True:
                                 cls._add_operator(
-                                    cls._add_index(model, (field_name,), unique), upgrade, True
+                                    cls._add_index(model, (field_name,), unique, safe),
+                                    upgrade,
+                                    True,
                                 )
                             else:
                                 cls._add_operator(
@@ -496,11 +508,13 @@ class Migrate:
         return cls.ddl.drop_index(model, fields_name, unique)
 
     @classmethod
-    def _add_index(cls, model: Type[Model], fields_name: Union[Tuple[str], Index], unique=False):
+    def _add_index(
+        cls, model: Type[Model], fields_name: Union[Tuple[str], Index], unique=False, safe=True
+    ):
         if isinstance(fields_name, Index):
-            return fields_name.get_sql(cls.ddl.schema_generator, model, False)
+            return fields_name.get_sql(cls.ddl.schema_generator, model, safe)
         fields_name = cls._resolve_fk_fields_name(model, fields_name)
-        return cls.ddl.add_index(model, fields_name, unique)
+        return cls.ddl.add_index(model, fields_name, unique, safe)
 
     @classmethod
     def _add_field(cls, model: Type[Model], field_describe: dict, is_pk: bool = False):
