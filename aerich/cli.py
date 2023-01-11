@@ -79,11 +79,18 @@ async def cli(ctx: Context, config, app):
 
 @cli.command(help="Generate migrate changes file.")
 @click.option("--name", default="update", show_default=True, help="Migrate name.")
+@click.option(
+    "--safe",
+    type=bool,
+    default=False,
+    help="When set to true, creates the table or indexes only when it does not already exist.",
+    show_default=True,
+)
 @click.pass_context
 @coro
-async def migrate(ctx: Context, name):
+async def migrate(ctx: Context, name, safe):
     command = ctx.obj["command"]
-    ret = await command.migrate(name)
+    ret = await command.migrate(name, safe)
     if not ret:
         return click.secho("No changes detected", fg=Color.yellow)
     click.secho(f"Success migrate {ret}", fg=Color.green)

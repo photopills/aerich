@@ -40,7 +40,9 @@ class BaseDDL:
         self.schema_generator = self.schema_generator_cls(client)
 
     def create_table(self, model: "Type[Model]"):
-        return self.schema_generator._get_table_sql(model, True)["table_creation_string"].rstrip(";")
+        return self.schema_generator._get_table_sql(model, True)["table_creation_string"].rstrip(
+            ";"
+        )
 
     def drop_table(self, table_name: str):
         return self._DROP_TABLE_TEMPLATE.format(table_name=table_name)
@@ -178,9 +180,10 @@ class BaseDDL:
             new_column_type=new_column_type,
         )
 
-    def add_index(self, model: "Type[Model]", field_names: List[str], unique=False):
+    def add_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=False):
         return self._ADD_INDEX_TEMPLATE.format(
             unique="UNIQUE " if unique else "",
+            exists="IF NOT EXISTS " if safe else "",
             index_name=self.schema_generator._generate_index_name(
                 "idx" if not unique else "uid", model, field_names
             ),
@@ -188,18 +191,20 @@ class BaseDDL:
             column_names=", ".join(self.schema_generator.quote(f) for f in field_names),
         )
 
-    def drop_index(self, model: "Type[Model]", field_names: List[str], unique=False):
+    def drop_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=False):
         return self._DROP_INDEX_TEMPLATE.format(
             index_name=self.schema_generator._generate_index_name(
                 "idx" if not unique else "uid", model, field_names
             ),
+            exists="IF NOT EXISTS " if safe else "",
             table_name=model._meta.db_table,
         )
 
-    def drop_index_by_name(self, model: "Type[Model]", index_name: str):
+    def drop_index_by_name(self, model: "Type[Model]", index_name: str, safe: bool):
         return self._DROP_INDEX_TEMPLATE.format(
             index_name=index_name,
             table_name=model._meta.db_table,
+            exists="IF NOT EXISTS " if safe else "",
         )
 
     def add_fk(self, model: "Type[Model]", field_describe: dict, reference_table_describe: dict):
