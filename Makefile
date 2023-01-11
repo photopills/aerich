@@ -15,13 +15,12 @@ deps:
 	@poetry install -E asyncpg -E asyncmy
 
 style: deps
-	isort -src $(checkfiles)
-	black $(black_opts) $(checkfiles)
+	@isort -src $(checkfiles)
+	@black $(black_opts) $(checkfiles)
 
 check: deps
-	black --check $(black_opts) $(checkfiles) || (echo "Please run 'make style' to auto-fix style issues" && false)
-	flake8 $(checkfiles)
-	bandit -x tests -r $(checkfiles)
+	@black --check $(black_opts) $(checkfiles) || (echo "Please run 'make style' to auto-fix style issues" && false)
+	@pflake8 $(checkfiles)
 
 test: deps
 	$(py_warn) TEST_DB=sqlite://:memory: py.test

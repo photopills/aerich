@@ -1,3 +1,4 @@
+import importlib
 import os
 from datetime import datetime
 from hashlib import md5
@@ -12,12 +13,20 @@ from tortoise.indexes import Index
 
 from aerich.ddl import BaseDDL
 from aerich.models import MAX_VERSION_LENGTH, Aerich
-from aerich.utils import (
-    get_app_connection,
-    get_models_describe,
-    is_default_function,
-    write_version_file,
-)
+from aerich.utils import get_app_connection, get_models_describe, is_default_function
+
+MIGRATE_TEMPLATE = """from tortoise import BaseDBAsyncClient
+
+
+async def upgrade(db: BaseDBAsyncClient) -> str:
+    return \"\"\"
+        {upgrade_sql}\"\"\"
+
+
+async def downgrade(db: BaseDBAsyncClient) -> str:
+    return \"\"\"
+        {downgrade_sql}\"\"\"
+"""
 
 
 class Migrate:
@@ -41,7 +50,7 @@ class Migrate:
     @classmethod
     def get_all_version_files(cls) -> List[str]:
         return sorted(
-            filter(lambda x: x.endswith("sql"), os.listdir(cls.migrate_location)),
+            filter(lambda x: x.endswith("py"), os.listdir(cls.migrate_location)),
             key=lambda x: int(x.split("_")[0]),
         )
 
@@ -64,6 +73,11 @@ class Migrate:
             cls._db_version = ret[1][0].get("version")
 
     @classmethod
+    async def load_ddl_class(cls):
+        ddl_dialect_module = importlib.import_module(f"aerich.ddl.{cls.dialect}")
+        return getattr(ddl_dialect_module, f"{cls.dialect.capitalize()}DDL")
+
+    @classmethod
     async def init(cls, config: dict, app: str, location: str):
         await Tortoise.init(config=config)
         last_version = await cls.get_last_version()
@@ -74,18 +88,8 @@ class Migrate:
 
         connection = get_app_connection(config, app)
         cls.dialect = connection.schema_generator.DIALECT
-        if cls.dialect == "mysql":
-            from aerich.ddl.mysql import MysqlDDL
-
-            cls.ddl = MysqlDDL(connection)
-        elif cls.dialect == "sqlite":
-            from aerich.ddl.sqlite import SqliteDDL
-
-            cls.ddl = SqliteDDL(connection)
-        elif cls.dialect == "postgres":
-            from aerich.ddl.postgres import PostgresDDL
-
-            cls.ddl = PostgresDDL(connection)
+        cls.ddl_class = await cls.load_ddl_class()
+        cls.ddl = cls.ddl_class(connection)
         await cls._get_db_version(connection)
 
     @classmethod
@@ -101,24 +105,28 @@ class Migrate:
         now = datetime.now().strftime("%Y%m%d%H%M%S").replace("/", "")
         last_version_num = await cls._get_last_version_num()
         if last_version_num is None:
-            return f"0_{now}_init.sql"
-        version = f"{last_version_num + 1}_{now}_{name}.sql"
+            return f"0_{now}_init.py"
+        version = f"{last_version_num + 1}_{now}_{name}.py"
         if len(version) > MAX_VERSION_LENGTH:
             raise ValueError(f"Version name exceeds maximum length ({MAX_VERSION_LENGTH})")
         return version
 
     @classmethod
-    async def _generate_diff_sql(cls, name):
+    async def _generate_diff_py(cls, name):
         version = await cls.generate_version(name)
         # delete if same version exists
         for version_file in cls.get_all_version_files():
             if version_file.startswith(version.split("_")[0]):
                 os.unlink(Path(cls.migrate_location, version_file))
-        content = {
-            "upgrade": list(dict.fromkeys(cls.upgrade_operators)),
-            "downgrade": list(dict.fromkeys(cls.downgrade_operators)),
-        }
-        write_version_file(Path(cls.migrate_location, version), content)
+
+        version_file = Path(cls.migrate_location, version)
+        content = MIGRATE_TEMPLATE.format(
+            upgrade_sql=";\n        ".join(cls.upgrade_operators) + ";",
+            downgrade_sql=";\n        ".join(cls.downgrade_operators) + ";",
+        )
+
+        with open(version_file, "w", encoding="utf-8") as f:
+            f.write(content)
         return version
 
     @classmethod
@@ -137,7 +145,7 @@ class Migrate:
         if not cls.upgrade_operators:
             return ""
 
-        return await cls._generate_diff_sql(name)
+        return await cls._generate_diff_py(name)
 
     @classmethod
     def _add_operator(cls, operator: str, upgrade=True, fk_m2m_index=False):
@@ -273,15 +281,17 @@ class Migrate:
                 # remove indexes
                 for index in old_indexes.difference(new_indexes):
                     cls._add_operator(cls._drop_index(model, index, False), upgrade, True)
-                old_data_fields = old_model_describe.get("data_fields")
-                new_data_fields = new_model_describe.get("data_fields")
+                old_data_fields = list(filter(lambda x: x.get('db_field_types') is not None,
+                                              old_model_describe.get("data_fields")))
+                new_data_fields = list(filter(lambda x: x.get('db_field_types') is not None,
+                                              new_model_describe.get("data_fields")))
 
                 old_data_fields_name = list(map(lambda x: x.get("name"), old_data_fields))
                 new_data_fields_name = list(map(lambda x: x.get("name"), new_data_fields))
 
                 # add fields or rename fields
                 for new_data_field_name in set(new_data_fields_name).difference(
-                    set(old_data_fields_name)
+                        set(old_data_fields_name)
                 ):
                     new_data_field = next(
                         filter(lambda x: x.get("name") == new_data_field_name, new_data_fields)
@@ -293,22 +303,22 @@ class Migrate:
                         if len(changes) == 2:
                             # rename field
                             if (
-                                changes[0]
-                                == (
+                                    changes[0]
+                                    == (
                                     "change",
                                     "name",
                                     (old_data_field_name, new_data_field_name),
-                                )
-                                and changes[1]
-                                == (
+                            )
+                                    and changes[1]
+                                    == (
                                     "change",
                                     "db_column",
                                     (
-                                        old_data_field.get("db_column"),
-                                        new_data_field.get("db_column"),
+                                            old_data_field.get("db_column"),
+                                            new_data_field.get("db_column"),
                                     ),
-                                )
-                                and old_data_field_name not in new_data_fields_name
+                            )
+                                    and old_data_field_name not in new_data_fields_name
                             ):
                                 if upgrade:
                                     is_rename = click.prompt(
@@ -324,9 +334,9 @@ class Migrate:
                                     cls._rename_old.append(old_data_field_name)
                                     # only MySQL8+ has rename syntax
                                     if (
-                                        cls.dialect == "mysql"
-                                        and cls._db_version
-                                        and cls._db_version.startswith("5.")
+                                            cls.dialect == "mysql"
+                                            and cls._db_version
+                                            and cls._db_version.startswith("5.")
                                     ):
                                         cls._add_operator(
                                             cls._change_field(
@@ -347,26 +357,44 @@ class Migrate:
                             ),
                             upgrade,
                         )
+                        if new_data_field["indexed"]:
+                            cls._add_operator(
+                                cls._add_index(
+                                    model, {new_data_field["db_column"]}, new_data_field["unique"]
+                                ),
+                                upgrade,
+                                True,
+                            )
                 # remove fields
                 for old_data_field_name in set(old_data_fields_name).difference(
-                    set(new_data_fields_name)
+                        set(new_data_fields_name)
                 ):
-                    # don't remove field if is rename
+                    # don't remove field if is renamed
                     if (upgrade and old_data_field_name in cls._rename_old) or (
-                        not upgrade and old_data_field_name in cls._rename_new
+                            not upgrade and old_data_field_name in cls._rename_new
                     ):
                         continue
+                    old_data_field = next(
+                        filter(lambda x: x.get("name") == old_data_field_name, old_data_fields)
+                    )
+                    db_column = old_data_field["db_column"]
                     cls._add_operator(
                         cls._remove_field(
                             model,
-                            next(
-                                filter(
-                                    lambda x: x.get("name") == old_data_field_name, old_data_fields
-                                )
-                            ).get("db_column"),
+                            db_column,
                         ),
                         upgrade,
                     )
+                    if old_data_field["indexed"]:
+                        cls._add_operator(
+                            cls._drop_index(
+                                model,
+                                {db_column},
+                            ),
+                            upgrade,
+                            True,
+                        )
+
                 old_fk_fields = old_model_describe.get("fk_fields")
                 new_fk_fields = new_model_describe.get("fk_fields")
 
@@ -375,7 +403,7 @@ class Migrate:
 
                 # add fk
                 for new_fk_field_name in set(new_fk_fields_name).difference(
-                    set(old_fk_fields_name)
+                        set(old_fk_fields_name)
                 ):
                     fk_field = next(
                         filter(lambda x: x.get("name") == new_fk_field_name, new_fk_fields)
@@ -390,7 +418,7 @@ class Migrate:
                         )
                 # drop fk
                 for old_fk_field_name in set(old_fk_fields_name).difference(
-                    set(new_fk_fields_name)
+                        set(new_fk_fields_name)
                 ):
                     old_fk_field = next(
                         filter(lambda x: x.get("name") == old_fk_field_name, old_fk_fields)
@@ -426,11 +454,17 @@ class Migrate:
                                     cls._drop_index(model, (field_name,), unique), upgrade, True
                                 )
                         elif option == "db_field_types.":
-                            # continue since repeated with others
-                            continue
+                            if new_data_field.get("field_type") == "DecimalField":
+                                # modify column
+                                cls._add_operator(
+                                    cls._modify_field(model, new_data_field),
+                                    upgrade,
+                                )
+                            else:
+                                continue
                         elif option == "default":
                             if not (
-                                is_default_function(old_new[0]) or is_default_function(old_new[1])
+                                    is_default_function(old_new[0]) or is_default_function(old_new[1])
                             ):
                                 # change column default
                                 cls._add_operator(

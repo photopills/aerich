@@ -1,6 +1,42 @@
 # ChangeLog
 
+## 0.7
+
+### 0.7.2
+
+- Support virtual fields.
+
+### 0.7.1
+
+- Fix syntax error with python3.8.10. (#265)
+- Fix sql generate error. (#263)
+- Fix initialize an empty database. (#267)
+
+### 0.7.1rc1
+
+- Fix postgres sql error (#263)
+
+### 0.7.0
+
+**Now aerich use `.py` file to record versions.**
+
+Upgrade Note:
+
+1. Drop `aerich` table
+2. Delete `migrations/models` folder
+3. Run `aerich init-db`
+
+- Improve `inspectdb` adding support to `postgresql::numeric` data type
+- Add support for dynamically load DDL classes easing to add support to
+  new databases without changing `Migrate` class logic
+- Fix decimal field change. (#246)
+- Support add/remove field with index.
+
 ## 0.6
+
+### 0.6.3
+
+- Improve `inspectdb` and support `postgres` & `sqlite`.
 
 ### 0.6.2
 
