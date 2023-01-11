@@ -29,7 +29,7 @@ def test_create_table():
     "name" VARCHAR(200),
     "created_at" TIMESTAMP NOT NULL  DEFAULT CURRENT_TIMESTAMP,
     "user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE /* User */
-);"""
+)"""
         )
 
     elif isinstance(Migrate.ddl, PostgresDDL):
