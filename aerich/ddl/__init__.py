@@ -177,7 +177,7 @@ class BaseDDL:
             new_column_type=new_column_type,
         )
 
-    def add_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=True):
+    def add_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=False):
         return self._ADD_INDEX_TEMPLATE.format(
             unique="UNIQUE " if unique else "",
             exists="IF NOT EXISTS " if safe else "",
@@ -188,7 +188,7 @@ class BaseDDL:
             column_names=", ".join([self.schema_generator.quote(f) for f in field_names]),
         )
 
-    def drop_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=True):
+    def drop_index(self, model: "Type[Model]", field_names: List[str], unique=False, safe=False):
         return self._DROP_INDEX_TEMPLATE.format(
             index_name=self.schema_generator._generate_index_name(
                 "idx" if not unique else "uid", model, field_names

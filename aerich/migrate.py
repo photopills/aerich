@@ -179,7 +179,7 @@ class Migrate:
         old_models: Dict[str, dict],
         new_models: Dict[str, dict],
         upgrade=True,
-        safe=True,
+        safe=False,
     ):
         """
         diff models and add operators
@@ -504,7 +504,7 @@ class Migrate:
         model: Type[Model],
         fields_name: Union[Tuple[str], Index],
         unique=False,
-        safe=True,
+        safe=False,
     ):
         if isinstance(fields_name, Index):
             return cls.ddl.drop_index_by_name(
@@ -519,7 +519,7 @@ class Migrate:
         model: Type[Model],
         fields_name: Union[Tuple[str], Index],
         unique=False,
-        safe=True,
+        safe=False,
     ):
         if isinstance(fields_name, Index):
             return fields_name.get_sql(cls.ddl.schema_generator, model, safe)

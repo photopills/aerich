@@ -82,7 +82,7 @@ async def cli(ctx: Context, config, app):
 @click.option(
     "--safe",
     type=bool,
-    default=True,
+    default=False,
     help="When set to true, creates the table or indexes only when it does not already exist.",
     show_default=True,
 )
