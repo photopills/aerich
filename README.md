@@ -46,7 +46,7 @@ Commands:
 
 ## Usage
 
-You need add `aerich.models` to your `Tortoise-ORM` config first. Example:
+You need to add `aerich.models` to your `Tortoise-ORM` config first. Example:
 
 ```python
 TORTOISE_ORM = {
@@ -112,6 +112,14 @@ Format of migrate filename is
 If `aerich` guesses you are renaming a column, it will ask `Rename {old_column} to {new_column} [True]`. You can choose
 `True` to rename column without column drop, or choose `False` to drop the column then create. Note that the latter may
 lose data.
+
+If you need to manually write migration, you could generate empty file:
+
+```shell
+> aerich migrate --name add_index --empty
+
+Success migrate 1_202326122220101229_add_index.py
+```
 
 ### Upgrade to latest version
 
