@@ -4,6 +4,7 @@ from typing import List, cast
 import pytest
 import tortoise
 from pytest_mock import MockerFixture
+from tortoise.indexes import Index
 
 from aerich.ddl.mysql import MysqlDDL
 from aerich.ddl.postgres import PostgresDDL
@@ -565,7 +566,7 @@ old_models_describe = {
         "description": None,
         "docstring": None,
         "unique_together": [],
-        "indexes": [],
+        "indexes": [Index(fields=("username",))],
         "pk_field": {
             "name": "id",
             "field_type": "IntField",
