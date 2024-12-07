@@ -48,7 +48,6 @@ class Migrate:
     migrate_location: Path
     dialect: str
     _db_version: Optional[str] = None
-    _patched_index_classes: set[Type[Index]] = set()
 
     @staticmethod
     def get_field_by_name(name: str, fields: List[dict]) -> dict:
@@ -191,25 +190,19 @@ class Migrate:
 
     @classmethod
     def _handle_indexes(cls, model: Type[Model], indexes: List[Union[Tuple[str], Index]]) -> list:
-        ret: list = []
-        for index in indexes:
-            if (
-                isinstance(index, Index)
-                and (index_cls := type(index)) not in cls._patched_index_classes
-            ):
+        if index_classes := set(index.__class__ for index in indexes if isinstance(index, Index)):
+            for index_cls in index_classes:
+                if index_cls(fields=("id",)) != index_cls(fields=("id",)):
 
-                def _hash(self) -> int:
-                    ident = self.index_name(cls.ddl.schema_generator, model) + index_cls.__name__
-                    return hash(ident)
+                    def _hash(self) -> int:
+                        return hash((tuple(self.fields), self.name, tuple(self.expressions)))
 
-                def _eq(self, other) -> bool:
-                    return type(other) is index_cls and hash(self) == hash(other)
+                    def _eq(self, other) -> bool:
+                        return type(other) is index_cls and hash(self) == hash(other)
 
-                setattr(index_cls, "__hash__", _hash)
-                setattr(index_cls, "__eq__", _eq)
-                cls._patched_index_classes.add(index_cls)
-            ret.append(index)
-        return ret
+                    setattr(index_cls, "__hash__", _hash)
+                    setattr(index_cls, "__eq__", _eq)
+        return indexes
 
     @classmethod
     def _get_indexes(cls, model, model_describe: dict) -> Set[Union[Index, Tuple[str, ...]]]:
