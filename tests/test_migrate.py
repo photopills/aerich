@@ -4,6 +4,7 @@ from typing import List, cast
 import pytest
 import tortoise
 from pytest_mock import MockerFixture
+from tortoise.contrib.postgres.indexes import HashIndex
 from tortoise.indexes import Index
 
 from aerich.ddl.mysql import MysqlDDL
@@ -566,7 +567,7 @@ old_models_describe = {
         "description": None,
         "docstring": None,
         "unique_together": [],
-        "indexes": [Index(fields=("username",))],
+        "indexes": [Index(fields=("username", "is_active"))],
         "pk_field": {
             "name": "id",
             "field_type": "IntField",
@@ -853,6 +854,11 @@ def test_migrate(mocker: MockerFixture):
     - rename column: Product.image -> Product.pic
     """
     mocker.patch("asyncclick.prompt", side_effect=(True,))
+
+    if isinstance(Migrate.ddl, PostgresDDL):
+        indexes = cast(list, old_models_describe["models.User"]["indexes"])
+        if len(indexes) == 1:
+            indexes.append(HashIndex(fields=("intro",)))
 
     models_describe = get_models_describe("models")
     Migrate.app = "models"

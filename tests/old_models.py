@@ -1,7 +1,9 @@
 import datetime
+import os
 from enum import IntEnum
 
 from tortoise import Model, fields
+from tortoise.contrib.postgres.indexes import HashIndex
 from tortoise.indexes import Index
 
 
@@ -33,7 +35,9 @@ class User(Model):
     longitude = fields.DecimalField(max_digits=12, decimal_places=9)
 
     class Meta:
-        indexes = [Index(fields=("username",))]
+        indexes = [Index(fields=("username", "is_active"))]
+        if "postgres" in os.getenv("TEST_DB", "") and len(indexes) == 1:
+            indexes.append(HashIndex(fields=("intro",)))
 
 
 class Email(Model):

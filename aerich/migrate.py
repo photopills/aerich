@@ -195,10 +195,10 @@ class Migrate:
                 if index_cls(fields=("id",)) != index_cls(fields=("id",)):
 
                     def _hash(self) -> int:
-                        return hash((tuple(self.fields), self.name, tuple(self.expressions)))
+                        return hash((tuple(sorted(self.fields)), self.name, self.expressions))
 
                     def _eq(self, other) -> bool:
-                        return type(other) is index_cls and hash(self) == hash(other)
+                        return type(self) is type(other) and hash(self) == hash(other)
 
                     setattr(index_cls, "__hash__", _hash)
                     setattr(index_cls, "__eq__", _eq)
