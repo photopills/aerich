@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, cast
 
 import pytest
 import tortoise
@@ -14,6 +13,9 @@ from aerich.exceptions import NotSupportError
 from aerich.migrate import MIGRATE_TEMPLATE, Migrate
 from aerich.utils import get_models_describe
 
+# tortoise-orm>=0.21 changes IntField constraints
+# from {"ge": 1, "le": 2147483647} to {"ge": -2147483648, "le": 2147483647}
+MIN_INT = 1 if tortoise.__version__ < "0.21" else -2147483648
 old_models_describe = {
     "models.Category": {
         "name": "models.Category",
@@ -36,7 +38,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -103,7 +105,7 @@ old_models_describe = {
                 "default": None,
                 "description": "User",
                 "docstring": None,
-                "constraints": {"ge": 1, "le": 2147483647},
+                "constraints": {"ge": MIN_INT, "le": 2147483647},
                 "db_field_types": {"": "INT"},
             },
             {
@@ -186,7 +188,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -293,7 +295,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -339,7 +341,7 @@ old_models_describe = {
                 "default": None,
                 "description": None,
                 "docstring": None,
-                "constraints": {"ge": 1, "le": 2147483647},
+                "constraints": {"ge": MIN_INT, "le": 2147483647},
                 "db_field_types": {"": "INT"},
             },
         ],
@@ -386,7 +388,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -580,7 +582,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -765,7 +767,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -824,16 +826,6 @@ old_models_describe = {
 }
 
 
-def should_add_user_id_column_type_alter_sql() -> bool:
-    if tortoise.__version__ < "0.21":
-        return False
-    # tortoise-orm>=0.21 changes IntField constraints
-    # from {"ge": 1, "le": 2147483647} to {"ge": -2147483648, "le": 2147483647}
-    data_fields = cast(List[dict], old_models_describe["models.Category"]["data_fields"])
-    user_id_constraints = data_fields[-1]["constraints"]
-    return tortoise.fields.data.IntField.constraints != user_id_constraints
-
-
 def test_migrate(mocker: MockerFixture):
     """
     models.py diff with old_models.py
@@ -852,8 +844,9 @@ def test_migrate(mocker: MockerFixture):
     - drop unique field: Config.name
     - alter default: Config.status
     - rename column: Product.image -> Product.pic
+    - rename fk column: Category.user -> Category.owner
     """
-    mocker.patch("asyncclick.prompt", side_effect=(True,))
+    mocker.patch("asyncclick.prompt", side_effect=(True, True))
 
     if isinstance(Migrate.ddl, PostgresDDL):
         indexes = cast(list, old_models_describe["models.User"]["indexes"])
@@ -878,6 +871,8 @@ def test_migrate(mocker: MockerFixture):
             "ALTER TABLE `category` MODIFY COLUMN `name` VARCHAR(200)",
             "ALTER TABLE `category` MODIFY COLUMN `slug` VARCHAR(100) NOT NULL",
             "ALTER TABLE `category` DROP INDEX `title`",
+            "ALTER TABLE `category` RENAME COLUMN `user_id` TO `owner_id`",
+            "ALTER TABLE `category` ADD CONSTRAINT `fk_category_user_110d4c63` FOREIGN KEY (`owner_id`) REFERENCES `user` (`id`) ON DELETE CASCADE",
             "ALTER TABLE `config` DROP COLUMN `name`",
             "ALTER TABLE `config` DROP INDEX `name`",
             "ALTER TABLE `config` ADD `user_id` INT NOT NULL  COMMENT 'User'",
@@ -885,7 +880,6 @@ def test_migrate(mocker: MockerFixture):
             "ALTER TABLE `config` ALTER COLUMN `status` DROP DEFAULT",
             "ALTER TABLE `config` MODIFY COLUMN `value` JSON NOT NULL",
             "ALTER TABLE `email` ADD `address` VARCHAR(200) NOT NULL",
-            "ALTER TABLE `email` DROP COLUMN `user_id`",
             "ALTER TABLE `configs` RENAME TO `config`",
             "ALTER TABLE `product` DROP COLUMN `uuid`",
             "ALTER TABLE `product` DROP INDEX `uuid`",
@@ -916,9 +910,10 @@ def test_migrate(mocker: MockerFixture):
             "ALTER TABLE `category` MODIFY COLUMN `name` VARCHAR(200) NOT NULL",
             "ALTER TABLE `category` MODIFY COLUMN `slug` VARCHAR(200) NOT NULL",
             "ALTER TABLE `category` ADD UNIQUE INDEX `title` (`title`)",
+            "ALTER TABLE `category` RENAME COLUMN `owner_id` TO `user_id`",
+            "ALTER TABLE `category` DROP FOREIGN KEY `fk_category_user_110d4c63`",
             "ALTER TABLE `config` ADD `name` VARCHAR(100) NOT NULL UNIQUE",
             "ALTER TABLE `config` ADD UNIQUE INDEX `name` (`name`)",
-            "ALTER TABLE `config` DROP COLUMN `user_id`",
             "ALTER TABLE `config` DROP FOREIGN KEY `fk_config_user_17daa970`",
             "ALTER TABLE `config` ALTER COLUMN `status` SET DEFAULT 1",
             "ALTER TABLE `email` ADD `user_id` INT NOT NULL",
@@ -950,10 +945,6 @@ def test_migrate(mocker: MockerFixture):
             "ALTER TABLE `product` MODIFY COLUMN `body` LONGTEXT NOT NULL",
             "ALTER TABLE `email` MODIFY COLUMN `is_primary` BOOL NOT NULL  DEFAULT 0",
         }
-        if should_add_user_id_column_type_alter_sql():
-            sql = "ALTER TABLE `category` MODIFY COLUMN `user_id` INT NOT NULL  COMMENT 'User'"
-            expected_upgrade_operators.add(sql)
-            expected_downgrade_operators.add(sql)
         assert not set(Migrate.upgrade_operators).symmetric_difference(expected_upgrade_operators)
 
         assert not set(Migrate.downgrade_operators).symmetric_difference(
@@ -966,6 +957,8 @@ def test_migrate(mocker: MockerFixture):
             'ALTER TABLE "category" ALTER COLUMN "name" DROP NOT NULL',
             'ALTER TABLE "category" ALTER COLUMN "slug" TYPE VARCHAR(100) USING "slug"::VARCHAR(100)',
             'ALTER TABLE "category" ALTER COLUMN "created_at" TYPE TIMESTAMPTZ USING "created_at"::TIMESTAMPTZ',
+            'ALTER TABLE "category" RENAME COLUMN "user_id" TO "owner_id"',
+            'ALTER TABLE "category" ADD CONSTRAINT "fk_category_user_110d4c63" FOREIGN KEY ("owner_id") REFERENCES "user" ("id") ON DELETE CASCADE',
             'ALTER TABLE "config" DROP COLUMN "name"',
             'DROP INDEX "uid_config_name_2c83c8"',
             'ALTER TABLE "config" ADD "user_id" INT NOT NULL',
@@ -974,7 +967,6 @@ def test_migrate(mocker: MockerFixture):
             'ALTER TABLE "config" ALTER COLUMN "value" TYPE JSONB USING "value"::JSONB',
             'ALTER TABLE "configs" RENAME TO "config"',
             'ALTER TABLE "email" ADD "address" VARCHAR(200) NOT NULL',
-            'ALTER TABLE "email" DROP COLUMN "user_id"',
             'ALTER TABLE "email" RENAME COLUMN "id" TO "email_id"',
             'ALTER TABLE "email" ALTER COLUMN "is_primary" TYPE BOOL USING "is_primary"::BOOL',
             'DROP INDEX "uid_product_uuid_d33c18"',
@@ -1004,11 +996,12 @@ def test_migrate(mocker: MockerFixture):
             'ALTER TABLE "category" ALTER COLUMN "name" SET NOT NULL',
             'ALTER TABLE "category" ALTER COLUMN "slug" TYPE VARCHAR(200) USING "slug"::VARCHAR(200)',
             'ALTER TABLE "category" ALTER COLUMN "created_at" TYPE TIMESTAMPTZ USING "created_at"::TIMESTAMPTZ',
+            'ALTER TABLE "category" RENAME COLUMN "owner_id" TO "user_id"',
+            'ALTER TABLE "category" DROP CONSTRAINT IF EXISTS "fk_category_user_110d4c63"',
             'ALTER TABLE "config" ADD "name" VARCHAR(100) NOT NULL UNIQUE',
             'CREATE UNIQUE INDEX "uid_config_name_2c83c8" ON "config" ("name")',
             'ALTER TABLE "config" ALTER COLUMN "status" SET DEFAULT 1',
-            'ALTER TABLE "config" DROP COLUMN "user_id"',
-            'ALTER TABLE "config" DROP CONSTRAINT "fk_config_user_17daa970"',
+            'ALTER TABLE "config" DROP CONSTRAINT IF EXISTS "fk_config_user_17daa970"',
             'ALTER TABLE "config" RENAME TO "configs"',
             'ALTER TABLE "config" ALTER COLUMN "value" TYPE JSONB USING "value"::JSONB',
             'ALTER TABLE "email" ADD "user_id" INT NOT NULL',
@@ -1037,10 +1030,6 @@ def test_migrate(mocker: MockerFixture):
             'DROP TABLE IF EXISTS "email_user"',
             'DROP TABLE IF EXISTS "newmodel"',
         }
-        if should_add_user_id_column_type_alter_sql():
-            sql = 'ALTER TABLE "category" ALTER COLUMN "user_id" TYPE INT USING "user_id"::INT'
-            expected_upgrade_operators.add(sql)
-            expected_downgrade_operators.add(sql)
         assert not set(Migrate.upgrade_operators).symmetric_difference(expected_upgrade_operators)
         assert not set(Migrate.downgrade_operators).symmetric_difference(
             expected_downgrade_operators
