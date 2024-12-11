@@ -55,10 +55,18 @@ class Migrate:
 
     @classmethod
     def get_all_version_files(cls) -> List[str]:
-        return sorted(
-            filter(lambda x: x.endswith("py"), os.listdir(cls.migrate_location)),
-            key=lambda x: int(x.split("_")[0]),
-        )
+        def get_file_version(file_name: str) -> str:
+            return file_name.split("_")[0]
+
+        def is_version_file(file_name: str) -> bool:
+            if not file_name.endswith("py"):
+                return False
+            if "_" not in file_name:
+                return False
+            return get_file_version(file_name).isdigit()
+
+        files = filter(is_version_file, os.listdir(cls.migrate_location))
+        return sorted(files, key=lambda x: int(get_file_version(x)))
 
     @classmethod
     def _get_model(cls, model: str) -> Type[Model]:
@@ -274,8 +282,8 @@ class Migrate:
                     length = len(old_m2m_fields)
                     field_index = {f["name"]: i for i, f in enumerate(new_m2m_fields)}
                     new_m2m_fields.sort(key=lambda field: field_index.get(field["name"], length))
-                for action, _, change in diff(old_m2m_fields, new_m2m_fields):
-                    if change[0][0] == "db_constraint":
+                for action, option, change in diff(old_m2m_fields, new_m2m_fields):
+                    if (option and option[-1] == "nullable") or change[0][0] == "db_constraint":
                         continue
                     new_value = change[0][1]
                     if isinstance(new_value, str):
