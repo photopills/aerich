@@ -1,10 +1,8 @@
 from pathlib import Path
-from typing import cast
 
 import pytest
 import tortoise
 from pytest_mock import MockerFixture
-from tortoise.contrib.postgres.indexes import HashIndex
 from tortoise.indexes import Index
 
 from aerich.ddl.mysql import MysqlDDL
@@ -13,6 +11,7 @@ from aerich.ddl.sqlite import SqliteDDL
 from aerich.exceptions import NotSupportError
 from aerich.migrate import MIGRATE_TEMPLATE, Migrate
 from aerich.utils import get_models_describe
+from tests.indexes import CustomIndex
 
 # tortoise-orm>=0.21 changes IntField constraints
 # from {"ge": 1, "le": 2147483647} to {"ge": -2147483648, "le": 2147483647}
@@ -570,7 +569,7 @@ old_models_describe = {
         "description": None,
         "docstring": None,
         "unique_together": [],
-        "indexes": [Index(fields=("username", "is_active"))],
+        "indexes": [Index(fields=("username", "is_active")), CustomIndex(fields=("is_superuser",))],
         "pk_field": {
             "name": "id",
             "field_type": "IntField",
@@ -848,11 +847,6 @@ def test_migrate(mocker: MockerFixture):
     - rename fk column: Category.user -> Category.owner
     """
     mocker.patch("asyncclick.prompt", side_effect=(True, True))
-
-    if isinstance(Migrate.ddl, PostgresDDL):
-        indexes = cast(list, old_models_describe["models.User"]["indexes"])
-        if len(indexes) == 1:
-            indexes.append(HashIndex(fields=("intro",)))
 
     models_describe = get_models_describe("models")
     Migrate.app = "models"

@@ -206,7 +206,7 @@ class Migrate:
                         return hash((tuple(sorted(self.fields)), self.name, self.expressions))
 
                     def _eq(self, other) -> bool:
-                        return type(self) is type(other) and hash(self) == hash(other)
+                        return type(self) is type(other) and self.__dict__ == other.__dict__
 
                     setattr(index_cls, "__hash__", _hash)
                     setattr(index_cls, "__eq__", _eq)

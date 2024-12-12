@@ -1,11 +1,11 @@
 import datetime
-import os
 import uuid
 from enum import IntEnum
 
 from tortoise import Model, fields
-from tortoise.contrib.postgres.indexes import HashIndex
 from tortoise.indexes import Index
+
+from tests.indexes import CustomIndex
 
 
 class ProductType(IntEnum):
@@ -37,9 +37,8 @@ class User(Model):
     products: fields.ManyToManyRelation["Product"]
 
     class Meta:
-        indexes = [Index(fields=("is_active", "username"))]
-        if "postgres" in os.getenv("TEST_DB", "") and len(indexes) == 1:
-            indexes.append(HashIndex(fields=("intro",)))
+        # reverse indexes elements
+        indexes = [CustomIndex(fields=("is_superuser",)), Index(fields=("username", "is_active"))]
 
 
 class Email(Model):
